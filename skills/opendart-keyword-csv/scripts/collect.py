@@ -256,7 +256,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset", action="append", help="로컬 val.tsv, 데이터셋 폴더 또는 ZIP (반복 가능)")
     parser.add_argument("--no-download", action="store_true", help="기존 --data-dir ZIP만 사용")
     parser.add_argument("--output", type=Path, default=Path("results/keyword_proximity_bulk_2025_2026.csv"))
-    parser.add_argument("--count", "--top", type=int, default=30, dest="count", help="내보낼 상위 회사 수 (기본 30)")
     parser.add_argument("--year", action="append", dest="years", default=None, help="보고기준일 연도 (기본: 2025, 2026)")
     parser.add_argument("--keyword", action="append", dest="keywords", help="두 키워드를 순서대로 두 번 지정")
     return parser
@@ -264,9 +263,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.count < 1:
-        print("오류: --count는 1 이상이어야 합니다.", file=sys.stderr)
-        return 2
     keywords = args.keywords or ["자기주식", "소각"]
     if len(keywords) != 2 or not all(keywords):
         print("오류: --keyword는 비어 있지 않은 키워드를 정확히 두 번 지정하세요.", file=sys.stderr)
@@ -281,8 +277,7 @@ def main(argv: list[str] | None = None) -> int:
 
     export_rows: list[tuple[str, str]] = []
     missing_names = 0
-    candidates = ranked[: args.count]
-    for result in candidates:
+    for result in ranked:
         sentence = str(result["sentence"])
         name = str(result["company_name"]).strip()
         if not name:
@@ -294,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"검색 연도: {', '.join(sorted(years))}")
     print(f"검색 ZIP/데이터 소스: {len(sources)}개 | 스캔 행: {rows_scanned:,}개")
     print(f"두 키워드 일치 행: {matching_rows:,}개 | 기업: {len(ranked):,}곳")
-    print(f"CSV 저장: {args.output} | 문장 {len(export_rows)}개 | 컬럼: 회사명, 문장")
+    print(f"CSV 저장: {args.output} | 전체 기업 {len(export_rows)}곳 | 컬럼: 회사명, 문장")
     if args.no_download and not args.dataset and sources and all(source.suffix.lower() == ".zip" for source in sources):
         found = {source.name for source in sources}
         missing = [name for name in OFFICIAL_BUNDLES if name not in found]

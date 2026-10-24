@@ -13,7 +13,7 @@ Use the packaged Python helper to create `opendart_dataset/` in the active works
 2. Run the packaged `scripts/collect.py` with Python 3.11+ from the active workspace. It creates the data directory, reuses verified archive files, downloads any missing official ZIPs in sequence, validates each ZIP contains `val.tsv`, then starts the analysis. On a failed download it stops before producing a partial CSV; a rerun reuses completed ZIPs and retries the missing file.
 3. The default report-date years are 2025 and 2026. A row matches only when its `VALUE` contains both exact Korean strings `자기주식` and `소각`.
 4. Rank companies by the smallest number of characters between the nearest occurrence of the two terms in any one row. For each company, use the row establishing its smallest distance and extract the sentence in that row containing both terms.
-5. Export the top 30 companies by default, with exactly two columns: `회사명`, `문장`. Set the desired company count with `--count 40`. The helper first maps CIKs through the bundled OpenDART Korean company-name snapshot, then falls back to the dataset's `EntityRegistrantName` facts. It does not call the company-code API.
+5. Export every matching company in the selected dataset and year range, ordered by keyword proximity, with exactly two columns: `회사명`, `문장`. Do not apply a top-N limit. The helper first maps CIKs through the bundled OpenDART Korean company-name snapshot, then falls back to the dataset's `EntityRegistrantName` facts. It does not call the company-code API.
 6. Report the output path, number of archives and rows scanned, number of matches/exported sentences, selected years, and any missing bundle or company-name issues. Never describe the result as all OpenDART disclosures: it covers only the files scanned. A row without a sentence containing both terms is reported and omitted from the sentence CSV. If the execution environment blocks network access or cannot run the packaged script, state that clearly and provide the local command; do not simulate a completed download or substitute a generated script artifact.
 
 ## Run options
@@ -36,10 +36,10 @@ Use a local dataset folder or a single `val.tsv`/ZIP source instead:
 python /path/to/opendart-keyword-csv/scripts/collect.py --dataset /path/to/queryEngineDataset
 ```
 
-Change years, top-N, paths, or keywords:
+Change years, paths, or keywords:
 
 ```sh
-python /path/to/opendart-keyword-csv/scripts/collect.py --year 2025 --year 2026 --count 50 --output results/custom.csv
+python /path/to/opendart-keyword-csv/scripts/collect.py --year 2025 --year 2026 --output results/custom.csv
 python /path/to/opendart-keyword-csv/scripts/collect.py --keyword 자기주식 --keyword 소각
 ```
 

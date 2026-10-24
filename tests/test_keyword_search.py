@@ -1,4 +1,6 @@
 import csv
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -95,23 +97,52 @@ class InputReuseTests(unittest.TestCase):
             + row("00000002", "20251231", "fact", "라마기업은 자기주식 취득분을 모두 소각했습니다.")
         )
 
-    def test_default_count_is_thirty(self):
-        self.assertEqual(cli.build_parser().parse_args([]).count, 30)
+    def test_company_count_option_is_removed(self):
+        with self.assertRaises(SystemExit):
+            cli.build_parser().parse_args(["--count", "1"])
 
-    def test_existing_tsv_prevents_download_and_count_limits_csv(self):
+    def test_existing_tsv_exports_all_matching_companies(self):
         data = self.root / "data"
         data.mkdir(parents=True)
         (data / "val.tsv").write_text(self._value_tsv(), encoding="utf-8")
         with patch.object(cli, "project_root", return_value=self.root), patch.object(
             cli, "download_official_bundles", side_effect=AssertionError("unexpected download")
         ):
-            status = cli.main(["--count", "1", "--output", str(self.output)])
+            status = cli.main(["--output", str(self.output)])
         self.assertEqual(status, 0)
         with self.output.open(encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
             rows = list(reader)
         self.assertEqual(reader.fieldnames, ["회사명", "문장"])
-        self.assertEqual(len(rows), 1)
+        self.assertEqual(len(rows), 2)
+
+    def test_standalone_skill_exports_all_matching_companies(self):
+        dataset = self.root / "val.tsv"
+        dataset.parent.mkdir(parents=True)
+        dataset.write_text(self._value_tsv(), encoding="utf-8")
+        skill_script = Path(__file__).resolve().parents[1] / "skills" / "opendart-keyword-csv" / "scripts" / "collect.py"
+
+        completed = subprocess.run(
+            [sys.executable, str(skill_script), "--dataset", str(dataset), "--output", str(self.output)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        with self.output.open(encoding="utf-8-sig", newline="") as stream:
+            reader = csv.DictReader(stream)
+            rows = list(reader)
+        self.assertEqual(reader.fieldnames, ["회사명", "문장"])
+        self.assertEqual(len(rows), 2)
+
+        limited = subprocess.run(
+            [sys.executable, str(skill_script), "--dataset", str(dataset), "--count", "1"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(limited.returncode, 0)
 
     def test_existing_zip_is_reused_with_no_download(self):
         archive = self.root / "opendart_dataset" / "existing.zip"
@@ -121,7 +152,7 @@ class InputReuseTests(unittest.TestCase):
         with patch.object(cli, "project_root", return_value=self.root), patch.object(
             cli, "download_official_bundles", side_effect=AssertionError("unexpected download")
         ):
-            status = cli.main(["--count", "2", "--no-download", "--output", str(self.output)])
+            status = cli.main(["--no-download", "--output", str(self.output)])
         self.assertEqual(status, 0)
         with self.output.open(encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
@@ -135,7 +166,7 @@ class InputReuseTests(unittest.TestCase):
         with patch.object(cli, "project_root", return_value=self.root), patch.object(
             cli, "download_official_bundles", return_value=[archive]
         ) as downloader:
-            status = cli.main(["--count", "2", "--output", str(self.output)])
+            status = cli.main(["--output", str(self.output)])
         self.assertEqual(status, 0)
         downloader.assert_called_once_with(self.root / "opendart_dataset")
 

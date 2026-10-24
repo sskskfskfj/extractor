@@ -12,11 +12,7 @@ python search_keyword_sentences.py
 
 실행 시 프로젝트 루트에 `opendart_dataset/` 폴더를 만들고, 2025~2026년 공개 분기 ZIP을 순서대로 받습니다. 정상 ZIP은 재사용하며, 중단된 다운로드가 있으면 빠진 파일부터 다시 받습니다. 다운로드가 끝나면 분석을 이어서 실행합니다. ZIP 안의 `val.tsv`를 직접 읽으므로 별도 압축 해제는 하지 않습니다.
 
-기본으로 사용 가능한 2025년 및 2026년 묶음을 검색해 상위 30개 기업을 저장합니다. 2026년 2분기는 정상 다운로드 링크가 확인되지 않아 제외됩니다. 40개가 필요하면:
-
-```sh
-python search_keyword_sentences.py --count 40
-```
+기본으로 사용 가능한 2025년 및 2026년 묶음을 검색해 조건에 맞는 전체 기업을 저장합니다. 2026년 2분기는 정상 다운로드 링크가 확인되지 않아 제외됩니다.
 
 결과는 `results/keyword_proximity_bulk_2025_2026.csv`에 저장되며 컬럼은 `회사명`, `문장` 두 개입니다. OpenDART API 키는 필요하지 않습니다.
 
@@ -33,7 +29,7 @@ python search_keyword_sentences.py --count 40
 
 ```sh
 python search_keyword_sentences.py --no-download
-python search_keyword_sentences.py --dataset /path/to/val.tsv --count 40
+python search_keyword_sentences.py --dataset /path/to/val.tsv
 python search_keyword_sentences.py --dataset /path/to/report.zip --report-year 2025
 ```
 

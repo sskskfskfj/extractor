@@ -82,9 +82,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--all-years", action="store_true", help="보고기준일 연도 제한을 해제합니다.")
     parser.add_argument(
-        "--count", "--top", type=int, default=30, dest="count", help="CSV에 저장할 기업 수 (기본 30)"
-    )
-    parser.add_argument(
         "--output", default="results/keyword_proximity_bulk_2025_2026.csv", help="CSV 저장 위치"
     )
     parser.add_argument("--no-download", action="store_true", help="로컬 ZIP/TSV만 사용하고 다운로드하지 않습니다.")
@@ -93,10 +90,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.count < 1:
-        print("오류: --count는 1 이상의 숫자여야 합니다.")
-        return 2
-
     years = None if args.all_years else (args.years or list(DEFAULT_YEARS))
     try:
         sources, source_label, warnings = _resolve_sources(args)
@@ -105,18 +98,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"오류: {exc}")
         return 2
 
-    selected = results[: args.count]
-    write_csv(selected, args.output)
+    write_csv(results, args.output)
     year_label = "모든 연도" if years is None else ", ".join(years)
     print(f"입력 자료: {source_label} ({len(sources)}개)")
     print(f"검색 연도: {year_label} | 검색어: 자기주식 + 소각")
-    print(f"조건에 맞는 기업: {len(results)}곳 | CSV에 저장: {len(selected)}곳")
+    print(f"조건에 맞는 전체 기업: {len(results)}곳 | CSV에 저장: {len(results)}곳")
     print(f"CSV 파일: {args.output} (회사명, 문장)")
     for warning in warnings:
         print(f"범위 안내: {warning}")
     if not args.dataset and source_label != "기존 로컬 val.tsv":
         for bundle, reason in UNAVAILABLE_BUNDLES.items():
             print(f"자료 안내: {bundle} 묶음은 포함되지 않았습니다 — {reason}")
-    if len(selected) < args.count:
-        print(f"안내: 요청한 {args.count}곳보다 추출 가능한 기업이 적어 {len(selected)}곳만 저장했습니다.")
     return 0
