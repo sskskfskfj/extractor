@@ -44,8 +44,10 @@ def search_dataset(
     year_set = None if years is None else {str(year) for year in years}
     names: dict[str, str] = {}
     results: dict[str, CompanyResult] = {}
+    source_list = list(sources)
 
-    for source in sources:
+    for index, source in enumerate(source_list, start=1):
+        print(f"분석 [{index}/{len(source_list)}]: {Path(source).name}", flush=True)
         for row in iter_value_rows(source):
             cik = (row.get("CIK") or "").strip().zfill(8)
             if not cik or cik == "00000000":

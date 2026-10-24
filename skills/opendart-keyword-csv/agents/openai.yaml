@@ -1,4 +1,4 @@
 interface:
   display_name: "OpenDART 키워드 CSV"
   short_description: "OpenDART ZIP에서 키워드 근접 문장 CSV 추출"
-  default_prompt: "Use $opendart-keyword-csv to download OpenDART XBRL ZIP data and export the closest matching company sentences to CSV."
+  default_prompt: "Use $opendart-keyword-csv to download available OpenDART ZIPs into opendart_dataset/, analyze them, and export the closest matching company sentences to CSV."

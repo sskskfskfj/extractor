@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "opendart-keyword-csv",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Find companies whose OpenDART XBRL note values contain both 자기주식 and 소각, rank by keyword proximity, and export matching sentences to CSV."
 }

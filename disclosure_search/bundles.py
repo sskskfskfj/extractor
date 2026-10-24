@@ -29,11 +29,14 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     downloaded: list[Path] = []
-    for filename, url in OFFICIAL_BUNDLES.items():
+    total = len(OFFICIAL_BUNDLES)
+    for index, (filename, url) in enumerate(OFFICIAL_BUNDLES.items(), start=1):
         target = destination / filename
-        if target.exists() and zipfile.is_zipfile(target):
+        if target.exists() and _zip_has_values(target):
             downloaded.append(target)
+            print(f"[{index}/{total}] 기존 ZIP 사용: {filename}", flush=True)
             continue
+        print(f"[{index}/{total}] ZIP 다운로드: {filename}", flush=True)
         partial = target.with_suffix(target.suffix + ".part")
         last_error: Exception | None = None
         for attempt in range(retries):
@@ -42,8 +45,8 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
                 with urlopen(request, timeout=90) as response, partial.open("wb") as output:
                     while chunk := response.read(1024 * 1024):
                         output.write(chunk)
-                if not zipfile.is_zipfile(partial):
-                    raise ValueError(f"다운로드 결과가 ZIP 파일이 아닙니다: {filename}")
+                if not _zip_has_values(partial):
+                    raise ValueError(f"val.tsv가 포함된 정상 ZIP이 아닙니다: {filename}")
                 partial.replace(target)
                 downloaded.append(target)
                 print(f"완료: {filename} ({target.stat().st_size:,} bytes)", flush=True)
@@ -59,10 +62,20 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
     return downloaded
 
 
+def _zip_has_values(path: Path) -> bool:
+    if not zipfile.is_zipfile(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(Path(member).name.lower() == "val.tsv" for member in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def main() -> int:
     from .cli import project_root
 
-    output_dir = project_root() / "data" / "opendart_xbrl_notes"
+    output_dir = project_root() / "opendart_dataset"
     print(f"OpenDART 주석 ZIP 저장 위치: {output_dir}")
     files = download_official_bundles(output_dir)
     print(f"준비된 공식 ZIP: {len(files)}/{len(OFFICIAL_BUNDLES)}")

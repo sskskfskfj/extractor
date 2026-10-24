@@ -18,5 +18,6 @@ wheels/
 
 # Local datasets and generated exports
 data/
+opendart_dataset/
 result/
 results/

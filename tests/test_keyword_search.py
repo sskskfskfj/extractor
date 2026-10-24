@@ -113,19 +113,31 @@ class InputReuseTests(unittest.TestCase):
         self.assertEqual(reader.fieldnames, ["회사명", "문장"])
         self.assertEqual(len(rows), 1)
 
-    def test_existing_zip_prevents_download(self):
-        archive = self.root / "data" / "opendart_xbrl_notes" / "existing.zip"
+    def test_existing_zip_is_reused_with_no_download(self):
+        archive = self.root / "opendart_dataset" / "existing.zip"
         archive.parent.mkdir(parents=True)
         with zipfile.ZipFile(archive, "w") as zipped:
             zipped.writestr("bundle/val.tsv", self._value_tsv())
         with patch.object(cli, "project_root", return_value=self.root), patch.object(
             cli, "download_official_bundles", side_effect=AssertionError("unexpected download")
         ):
-            status = cli.main(["--count", "2", "--output", str(self.output)])
+            status = cli.main(["--count", "2", "--no-download", "--output", str(self.output)])
         self.assertEqual(status, 0)
         with self.output.open(encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 2)
+
+    def test_partial_zip_set_requests_missing_bundles(self):
+        archive = self.root / "opendart_dataset" / "2025_1Q_20261001021129.zip"
+        archive.parent.mkdir(parents=True)
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.writestr("bundle/val.tsv", self._value_tsv())
+        with patch.object(cli, "project_root", return_value=self.root), patch.object(
+            cli, "download_official_bundles", return_value=[archive]
+        ) as downloader:
+            status = cli.main(["--count", "2", "--output", str(self.output)])
+        self.assertEqual(status, 0)
+        downloader.assert_called_once_with(self.root / "opendart_dataset")
 
 
 if __name__ == "__main__":

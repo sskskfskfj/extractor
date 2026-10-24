@@ -31,43 +31,42 @@ def _resolve_sources(args: argparse.Namespace) -> tuple[list[Path], str, list[st
             raise FileNotFoundError("입력 데이터 경로가 없습니다: " + ", ".join(missing))
         return sources, "사용자가 지정한 데이터", []
 
-    bulk_dir = root / "data" / "opendart_xbrl_notes"
+    bulk_dir = root / "opendart_dataset"
     zip_paths = sorted(bulk_dir.rglob("*.zip")) if bulk_dir.exists() else []
     invalid_zips = [path for path in zip_paths if not zipfile.is_zipfile(path)]
     usable_zips = [path for path in zip_paths if _zip_has_values(path)]
-
-    # Any local value data wins. In particular, never replace a local source by a download.
-    if usable_zips:
-        found = {path.name for path in usable_zips}
-        missing = [name for name in OFFICIAL_BUNDLES if name not in found]
-        warnings = []
-        if missing:
-            warnings.append(f"공식 ZIP 일부만 사용합니다. 누락: {', '.join(missing)}")
-        if invalid_zips:
-            warnings.append(f"손상된 ZIP은 제외했습니다: {', '.join(path.name for path in invalid_zips)}")
-        return usable_zips, "프로젝트의 기존 OpenDART ZIP", warnings
 
     tsv_candidates = [
         bulk_dir / "val.tsv",
         root / "data" / "val.tsv",
         root.parent / "queryEngineDataset" / "val.tsv",
     ]
-    for tsv_path in tsv_candidates:
-        if tsv_path.is_file():
-            warnings = [f"손상된 ZIP 파일이 있어도 다운로드하지 않았습니다: {invalid_zips[0]}"] if invalid_zips else []
-            return [tsv_path], "기존 로컬 val.tsv", warnings
-
-    if zip_paths:
-        raise ValueError(
-            "ZIP 파일은 있지만 유효한 val.tsv가 없습니다. 외부에서 다시 받지 않도록 자동 다운로드를 중단했습니다. "
-            "손상되었거나 잘못된 ZIP을 확인하거나 `--dataset`으로 val.tsv를 지정하세요."
-        )
     if args.no_download:
+        if usable_zips:
+            found = {path.name for path in usable_zips}
+            missing = [name for name in OFFICIAL_BUNDLES if name not in found]
+            warnings = []
+            if missing:
+                warnings.append(f"공식 ZIP 일부만 사용합니다. 누락: {', '.join(missing)}")
+            if invalid_zips:
+                warnings.append(f"val.tsv가 없거나 손상된 ZIP은 제외했습니다: {', '.join(path.name for path in invalid_zips)}")
+            return usable_zips, "opendart_dataset의 기존 ZIP", warnings
+        for tsv_path in tsv_candidates:
+            if tsv_path.is_file():
+                return [tsv_path], "기존 로컬 val.tsv", []
+        if invalid_zips:
+            raise ValueError("유효하지 않은 ZIP만 있습니다: " + ", ".join(path.name for path in invalid_zips))
         raise FileNotFoundError("사용 가능한 ZIP 또는 val.tsv가 없습니다. `--no-download`를 빼거나 `--dataset`을 지정하세요.")
 
-    print("기존 ZIP이나 val.tsv를 찾지 못해 OpenDART ZIP을 다운로드합니다.", flush=True)
+    if not zip_paths:
+        for tsv_path in tsv_candidates:
+            if tsv_path.is_file():
+                return [tsv_path], "기존 로컬 val.tsv", []
+
+    # Download any missing official bundles even when a previous run left a partial set.
+    print("opendart_dataset/을 준비하고 누락된 OpenDART ZIP을 순서대로 확인합니다.", flush=True)
     downloaded = download_official_bundles(bulk_dir)
-    return downloaded, "새로 내려받은 OpenDART ZIP", []
+    return downloaded, "opendart_dataset ZIP", []
 
 
 def build_parser() -> argparse.ArgumentParser:

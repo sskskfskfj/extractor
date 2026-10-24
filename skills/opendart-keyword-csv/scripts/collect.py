@@ -83,16 +83,29 @@ def matching_sentence(value: str, first: str, second: str) -> tuple[str, int] | 
     return sentence, distance
 
 
+def _zip_has_value_table(path: Path) -> bool:
+    if not zipfile.is_zipfile(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(Path(member).name.lower() == "val.tsv" for member in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def download_bundles(data_dir: Path) -> list[Path]:
+    """Create the data folder and fetch every missing official archive in order."""
     data_dir.mkdir(parents=True, exist_ok=True)
     downloaded = []
-    for filename, url in OFFICIAL_BUNDLES.items():
+    total = len(OFFICIAL_BUNDLES)
+    for index, (filename, url) in enumerate(OFFICIAL_BUNDLES.items(), start=1):
         target = data_dir / filename
-        if target.exists() and zipfile.is_zipfile(target):
+        if target.exists() and _zip_has_value_table(target):
             downloaded.append(target)
-            print(f"기존 ZIP 사용: {target}", flush=True)
+            print(f"[{index}/{total}] 기존 ZIP 사용: {target}", flush=True)
             continue
 
+        print(f"[{index}/{total}] ZIP 다운로드: {filename}", flush=True)
         partial = target.with_suffix(target.suffix + ".part")
         last_error: Exception | None = None
         for attempt in range(3):
@@ -101,8 +114,8 @@ def download_bundles(data_dir: Path) -> list[Path]:
                 with urllib.request.urlopen(request, timeout=90) as response, partial.open("wb") as output:
                     while chunk := response.read(1024 * 1024):
                         output.write(chunk)
-                if not zipfile.is_zipfile(partial):
-                    raise ValueError(f"정상 ZIP이 아닙니다: {filename}")
+                if not _zip_has_value_table(partial):
+                    raise ValueError(f"val.tsv를 포함한 정상 ZIP이 아닙니다: {filename}")
                 partial.replace(target)
                 downloaded.append(target)
                 print(f"다운로드 완료: {target} ({target.stat().st_size:,} bytes)", flush=True)
@@ -123,16 +136,23 @@ def input_sources(args: argparse.Namespace) -> list[Path]:
         sources = [Path(item).expanduser() for item in args.dataset]
     else:
         data_dir = args.data_dir.expanduser()
-        sources = sorted(data_dir.glob("*.zip"))
         local_tsvs = [data_dir / "val.tsv", Path("data/val.tsv"), Path("../queryEngineDataset/val.tsv")]
-        if not sources:
-            existing_tsv = next((path for path in local_tsvs if path.is_file()), None)
-            if existing_tsv:
+        existing_tsv = next((path for path in local_tsvs if path.is_file()), None)
+        sources = sorted(data_dir.glob("*.zip"))
+        if args.no_download:
+            if sources:
+                invalid = [path.name for path in sources if not _zip_has_value_table(path)]
+                if invalid:
+                    raise ValueError("val.tsv가 없거나 손상된 ZIP: " + ", ".join(invalid))
+            elif existing_tsv:
                 sources = [existing_tsv]
-            elif args.no_download:
-                raise FileNotFoundError(f"사용 가능한 ZIP 또는 val.tsv가 없습니다: {data_dir}")
             else:
-                sources = download_bundles(data_dir)
+                raise FileNotFoundError(f"사용 가능한 ZIP 또는 val.tsv가 없습니다: {data_dir}")
+        elif existing_tsv and not sources:
+            sources = [existing_tsv]
+        else:
+            # Also fill gaps after an interrupted/partial download. Valid archives are reused.
+            sources = download_bundles(data_dir)
     for source in sources:
         if not source.exists():
             raise FileNotFoundError(f"입력 경로가 없습니다: {source}")
@@ -232,7 +252,7 @@ def write_csv(results: list[tuple[str, str]], output: Path) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OpenDART XBRL에서 키워드 근접 문장을 찾아 CSV로 저장합니다.")
-    parser.add_argument("--data-dir", type=Path, default=Path("data/opendart_xbrl_notes"), help="ZIP 저장/검색 폴더")
+    parser.add_argument("--data-dir", type=Path, default=Path("opendart_dataset"), help="ZIP 저장/검색 폴더")
     parser.add_argument("--dataset", action="append", help="로컬 val.tsv, 데이터셋 폴더 또는 ZIP (반복 가능)")
     parser.add_argument("--no-download", action="store_true", help="기존 --data-dir ZIP만 사용")
     parser.add_argument("--output", type=Path, default=Path("results/keyword_proximity_bulk_2025_2026.csv"))
@@ -275,6 +295,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"검색 ZIP/데이터 소스: {len(sources)}개 | 스캔 행: {rows_scanned:,}개")
     print(f"두 키워드 일치 행: {matching_rows:,}개 | 기업: {len(ranked):,}곳")
     print(f"CSV 저장: {args.output} | 문장 {len(export_rows)}개 | 컬럼: 회사명, 문장")
+    if args.no_download and not args.dataset and sources and all(source.suffix.lower() == ".zip" for source in sources):
+        found = {source.name for source in sources}
+        missing = [name for name in OFFICIAL_BUNDLES if name not in found]
+        if missing:
+            print(f"범위 경고: 일부 공식 ZIP만 사용했습니다. 누락: {', '.join(missing)}")
     if missing_names:
         print(f"주의: 데이터에서 기업명을 찾지 못한 기업: {missing_names}곳 (CIK를 표시함)")
     if not args.dataset and not args.no_download:

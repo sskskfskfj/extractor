@@ -10,7 +10,9 @@ source .venv/bin/activate
 python search_keyword_sentences.py
 ```
 
-기본으로 2025년과 2026년 데이터를 검색해 상위 30개 기업을 저장합니다. 40개가 필요하면:
+실행 시 프로젝트 루트에 `opendart_dataset/` 폴더를 만들고, 2025~2026년 공개 분기 ZIP을 순서대로 받습니다. 정상 ZIP은 재사용하며, 중단된 다운로드가 있으면 빠진 파일부터 다시 받습니다. 다운로드가 끝나면 분석을 이어서 실행합니다. ZIP 안의 `val.tsv`를 직접 읽으므로 별도 압축 해제는 하지 않습니다.
+
+기본으로 사용 가능한 2025년 및 2026년 묶음을 검색해 상위 30개 기업을 저장합니다. 2026년 2분기는 정상 다운로드 링크가 확인되지 않아 제외됩니다. 40개가 필요하면:
 
 ```sh
 python search_keyword_sentences.py --count 40
@@ -23,11 +25,11 @@ python search_keyword_sentences.py --count 40
 실행기는 다음 순서로 데이터를 찾습니다.
 
 1. `--dataset`으로 지정한 ZIP, `val.tsv`, 또는 데이터 폴더
-2. `data/opendart_xbrl_notes/`에 이미 있는 ZIP
-3. `data/val.tsv` 또는 프로젝트 옆 `queryEngineDataset/val.tsv`
-4. 위 자료가 하나도 없을 때 OpenDART 공개 ZIP 다운로드
+2. `opendart_dataset/`에 이미 있는 공식 ZIP
+3. `opendart_dataset/val.tsv`, `data/val.tsv`, 또는 프로젝트 옆 `queryEngineDataset/val.tsv`
+4. 위 자료가 없거나 ZIP이 일부뿐이면 `opendart_dataset/`에 빠진 OpenDART 공개 ZIP을 순차 다운로드
 
-기존 ZIP이나 `val.tsv`가 있으면 새 ZIP을 받지 않습니다. 일부 ZIP만 있으면 있는 파일만 검색하고 누락 묶음을 결과에 표시합니다. 다운로드를 막으려면 `--no-download`를 사용하세요.
+`opendart_dataset/`에 정상 ZIP이 있으면 다시 받지 않습니다. 일부 ZIP만 있으면 누락 ZIP을 이어서 받습니다. 다운로드를 막으려면 `--no-download`를 사용하세요. 다른 환경에 스킬만 설치한 경우에도 현재 작업 폴더를 기준으로 `opendart_dataset/`과 `results/`를 만들기 때문에, 스킬 설치 경로에 쓰기 권한이 필요하지 않습니다.
 
 ```sh
 python search_keyword_sentences.py --no-download
