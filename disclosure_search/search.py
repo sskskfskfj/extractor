@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from .matching import nearest_pair, nearest_sentence
+from .matching import nearest_sentence
 from .sources import iter_value_rows
 
 KEYWORDS = ("자기주식", "소각")
@@ -63,15 +63,12 @@ def search_dataset(
             if len(report_date) < 4 or (year_set is not None and report_date[:4] not in year_set):
                 continue
             value = row.get("VALUE") or ""
-            if nearest_pair(value, *KEYWORDS) is None:
-                continue
-
-            result = results.get(cik)
             sentence_match = nearest_sentence(value, *KEYWORDS)
             if sentence_match is None:
                 continue
             sentence, match = sentence_match
 
+            result = results.get(cik)
             if result is None:
                 results[cik] = CompanyResult(
                     cik=cik,

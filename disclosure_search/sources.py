@@ -7,12 +7,24 @@ import io
 import sys
 import zipfile
 
-from pathlib import Path
 from collections.abc import Iterator
+from pathlib import Path
 
 
 # XBRL narrative facts can be much larger than csv's 128 KiB default.
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
+
+
+def has_value_table(source: str | Path) -> bool:
+    """Return whether source is a readable ZIP containing a val.tsv member."""
+    path = Path(source)
+    if not zipfile.is_zipfile(path):
+        return False
+    try:
+        with zipfile.ZipFile(path) as archive:
+            return any(Path(name).name.lower() == "val.tsv" for name in archive.namelist())
+    except (OSError, zipfile.BadZipFile):
+        return False
 
 
 def iter_value_rows(source: str | Path) -> Iterator[dict[str, str]]:

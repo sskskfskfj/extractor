@@ -9,17 +9,11 @@ from pathlib import Path
 
 from .bundles import OFFICIAL_BUNDLES, UNAVAILABLE_BUNDLES, download_official_bundles
 from .search import DEFAULT_YEARS, search_dataset, write_csv
+from .sources import has_value_table
 
 
 def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
-
-
-def _zip_has_values(path: Path) -> bool:
-    if not zipfile.is_zipfile(path):
-        return False
-    with zipfile.ZipFile(path) as archive:
-        return any(Path(name).name.lower() == "val.tsv" for name in archive.namelist())
 
 
 def _resolve_sources(args: argparse.Namespace) -> tuple[list[Path], str, list[str]]:
@@ -33,8 +27,10 @@ def _resolve_sources(args: argparse.Namespace) -> tuple[list[Path], str, list[st
 
     bulk_dir = root / "opendart_dataset"
     zip_paths = sorted(bulk_dir.rglob("*.zip")) if bulk_dir.exists() else []
-    invalid_zips = [path for path in zip_paths if not zipfile.is_zipfile(path)]
-    usable_zips = [path for path in zip_paths if _zip_has_values(path)]
+    usable_zips: list[Path] = []
+    invalid_zips: list[Path] = []
+    for path in zip_paths:
+        (usable_zips if has_value_table(path) else invalid_zips).append(path)
 
     tsv_candidates = [
         bulk_dir / "val.tsv",
@@ -105,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sources, source_label, warnings = _resolve_sources(args)
         results = search_dataset(sources, years)
-    except (FileNotFoundError, ValueError, RuntimeError, OSError, zipfile.BadZipFile) as exc:
+    except (FileNotFoundError, ValueError, RuntimeError, OSError) as exc:
         print(f"오류: {exc}")
         return 2
 

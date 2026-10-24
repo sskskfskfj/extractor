@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import time
-import zipfile
 
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+from .sources import has_value_table
 
 
 OFFICIAL_BUNDLES = {
@@ -32,7 +33,7 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
     total = len(OFFICIAL_BUNDLES)
     for index, (filename, url) in enumerate(OFFICIAL_BUNDLES.items(), start=1):
         target = destination / filename
-        if target.exists() and _zip_has_values(target):
+        if target.exists() and has_value_table(target):
             downloaded.append(target)
             print(f"[{index}/{total}] 기존 ZIP 사용: {filename}", flush=True)
             continue
@@ -45,7 +46,7 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
                 with urlopen(request, timeout=90) as response, partial.open("wb") as output:
                     while chunk := response.read(1024 * 1024):
                         output.write(chunk)
-                if not _zip_has_values(partial):
+                if not has_value_table(partial):
                     raise ValueError(f"val.tsv가 포함된 정상 ZIP이 아닙니다: {filename}")
                 partial.replace(target)
                 downloaded.append(target)
@@ -60,16 +61,6 @@ def download_official_bundles(destination: str | Path, retries: int = 3) -> list
         if last_error:
             raise RuntimeError(f"{filename} 다운로드 실패: {last_error}") from last_error
     return downloaded
-
-
-def _zip_has_values(path: Path) -> bool:
-    if not zipfile.is_zipfile(path):
-        return False
-    try:
-        with zipfile.ZipFile(path) as archive:
-            return any(Path(member).name.lower() == "val.tsv" for member in archive.namelist())
-    except (OSError, zipfile.BadZipFile):
-        return False
 
 
 def main() -> int:
