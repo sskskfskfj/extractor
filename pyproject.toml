@@ -1,0 +1,9 @@
+[project]
+name = "disclosure-keyword-proximity"
+version = "0.1.0"
+description = "Rank disclosure companies by proximity of two terms in value rows"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false

@@ -1,0 +1,127 @@
+"""Command-line interface for the keyword-to-sentence CSV workflow."""
+
+from __future__ import annotations
+
+import argparse
+import zipfile
+
+from pathlib import Path
+
+from .bundles import OFFICIAL_BUNDLES, UNAVAILABLE_BUNDLES, download_official_bundles
+from .search import DEFAULT_YEARS, search_dataset, write_csv
+
+
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _zip_has_values(path: Path) -> bool:
+    if not zipfile.is_zipfile(path):
+        return False
+    with zipfile.ZipFile(path) as archive:
+        return any(Path(name).name.lower() == "val.tsv" for name in archive.namelist())
+
+
+def _resolve_sources(args: argparse.Namespace) -> tuple[list[Path], str, list[str]]:
+    root = project_root()
+    if args.dataset:
+        sources = [Path(item).expanduser() for item in args.dataset]
+        missing = [str(path) for path in sources if not path.exists()]
+        if missing:
+            raise FileNotFoundError("입력 데이터 경로가 없습니다: " + ", ".join(missing))
+        return sources, "사용자가 지정한 데이터", []
+
+    bulk_dir = root / "data" / "opendart_xbrl_notes"
+    zip_paths = sorted(bulk_dir.rglob("*.zip")) if bulk_dir.exists() else []
+    invalid_zips = [path for path in zip_paths if not zipfile.is_zipfile(path)]
+    usable_zips = [path for path in zip_paths if _zip_has_values(path)]
+
+    # Any local value data wins. In particular, never replace a local source by a download.
+    if usable_zips:
+        found = {path.name for path in usable_zips}
+        missing = [name for name in OFFICIAL_BUNDLES if name not in found]
+        warnings = []
+        if missing:
+            warnings.append(f"공식 ZIP 일부만 사용합니다. 누락: {', '.join(missing)}")
+        if invalid_zips:
+            warnings.append(f"손상된 ZIP은 제외했습니다: {', '.join(path.name for path in invalid_zips)}")
+        return usable_zips, "프로젝트의 기존 OpenDART ZIP", warnings
+
+    tsv_candidates = [
+        bulk_dir / "val.tsv",
+        root / "data" / "val.tsv",
+        root.parent / "queryEngineDataset" / "val.tsv",
+    ]
+    for tsv_path in tsv_candidates:
+        if tsv_path.is_file():
+            warnings = [f"손상된 ZIP 파일이 있어도 다운로드하지 않았습니다: {invalid_zips[0]}"] if invalid_zips else []
+            return [tsv_path], "기존 로컬 val.tsv", warnings
+
+    if zip_paths:
+        raise ValueError(
+            "ZIP 파일은 있지만 유효한 val.tsv가 없습니다. 외부에서 다시 받지 않도록 자동 다운로드를 중단했습니다. "
+            "손상되었거나 잘못된 ZIP을 확인하거나 `--dataset`으로 val.tsv를 지정하세요."
+        )
+    if args.no_download:
+        raise FileNotFoundError("사용 가능한 ZIP 또는 val.tsv가 없습니다. `--no-download`를 빼거나 `--dataset`을 지정하세요.")
+
+    print("기존 ZIP이나 val.tsv를 찾지 못해 OpenDART ZIP을 다운로드합니다.", flush=True)
+    downloaded = download_official_bundles(bulk_dir)
+    return downloaded, "새로 내려받은 OpenDART ZIP", []
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="같은 문장 안에서 '자기주식'과 '소각'이 가까이 나온 기업을 찾아 CSV로 저장합니다."
+    )
+    parser.add_argument(
+        "--dataset",
+        action="append",
+        help="val.tsv 파일, 데이터셋 폴더 또는 val.tsv가 든 ZIP. 여러 번 지정할 수 있습니다.",
+    )
+    parser.add_argument(
+        "--report-year",
+        action="append",
+        dest="years",
+        help="보고기준일 연도 (기본 2025, 2026; 여러 번 지정 가능)",
+    )
+    parser.add_argument("--all-years", action="store_true", help="보고기준일 연도 제한을 해제합니다.")
+    parser.add_argument(
+        "--count", "--top", type=int, default=30, dest="count", help="CSV에 저장할 기업 수 (기본 30)"
+    )
+    parser.add_argument(
+        "--output", default="results/keyword_proximity_bulk_2025_2026.csv", help="CSV 저장 위치"
+    )
+    parser.add_argument("--no-download", action="store_true", help="로컬 ZIP/TSV만 사용하고 다운로드하지 않습니다.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.count < 1:
+        print("오류: --count는 1 이상의 숫자여야 합니다.")
+        return 2
+
+    years = None if args.all_years else (args.years or list(DEFAULT_YEARS))
+    try:
+        sources, source_label, warnings = _resolve_sources(args)
+        results = search_dataset(sources, years)
+    except (FileNotFoundError, ValueError, RuntimeError, OSError, zipfile.BadZipFile) as exc:
+        print(f"오류: {exc}")
+        return 2
+
+    selected = results[: args.count]
+    write_csv(selected, args.output)
+    year_label = "모든 연도" if years is None else ", ".join(years)
+    print(f"입력 자료: {source_label} ({len(sources)}개)")
+    print(f"검색 연도: {year_label} | 검색어: 자기주식 + 소각")
+    print(f"조건에 맞는 기업: {len(results)}곳 | CSV에 저장: {len(selected)}곳")
+    print(f"CSV 파일: {args.output} (회사명, 문장)")
+    for warning in warnings:
+        print(f"범위 안내: {warning}")
+    if not args.dataset and source_label != "기존 로컬 val.tsv":
+        for bundle, reason in UNAVAILABLE_BUNDLES.items():
+            print(f"자료 안내: {bundle} 묶음은 포함되지 않았습니다 — {reason}")
+    if len(selected) < args.count:
+        print(f"안내: 요청한 {args.count}곳보다 추출 가능한 기업이 적어 {len(selected)}곳만 저장했습니다.")
+    return 0
